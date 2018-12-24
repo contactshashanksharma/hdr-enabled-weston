@@ -43,6 +43,7 @@ extern "C" {
 
 #include <libweston/matrix.h>
 #include <libweston/zalloc.h>
+#include <libweston/hdr_metadata_defs.h>
 
 struct weston_geometry {
 	int32_t x, y;
@@ -1350,6 +1351,8 @@ struct weston_surface_state {
 
 	/* weston_protected_surface.enforced/relaxed */
 	enum weston_surface_protection_mode protection_mode;
+
+	struct weston_hdr_metadata *hdr_metadata;
 };
 
 struct weston_surface_activation_data {
@@ -1481,6 +1484,9 @@ struct weston_surface {
 	enum weston_hdcp_protection desired_protection;
 	enum weston_hdcp_protection current_protection;
 	enum weston_surface_protection_mode protection_mode;
+
+	struct wl_resource *hdr_surface_resource;
+	struct weston_hdr_metadata *hdr_metadata;
 };
 
 struct weston_subsurface {
@@ -2058,6 +2064,9 @@ weston_compositor_enable_content_protection(struct weston_compositor *compositor
 void
 weston_timeline_refresh_subscription_objects(struct weston_compositor *wc,
 					     void *object);
+
+int
+weston_hdr_metadata_setup(struct weston_compositor *compositor);
 
 #ifdef  __cplusplus
 }
