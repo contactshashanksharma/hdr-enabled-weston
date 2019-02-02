@@ -45,10 +45,29 @@ enum gl_shader_texture_variant {
 	SHADER_VARIANT_EXTERNAL,
 };
 
+enum gl_shader_degamma_variant {
+	SHADER_DEGAMMA_NONE = 0,
+	SHADER_DEGAMMA_LINEAR,
+	SHADER_DEGAMMA_SRGB,
+	SHADER_DEGAMMA_PQ,
+	SHADER_DEGAMMA_HLG,
+};
+
+enum gl_shader_gamma_variant {
+	SHADER_GAMMA_NONE = 0,
+	SHADER_GAMMA_LINEAR,
+	SHADER_GAMMA_SRGB,
+	SHADER_GAMMA_PQ,
+	SHADER_GAMMA_HLG,
+};
+
 struct gl_shader_requirements
 {
 	enum gl_shader_texture_variant variant;
 	bool debug;
+	bool csc_matrix;
+	enum gl_shader_degamma_variant degamma;
+	enum gl_shader_gamma_variant gamma;
 };
 
 struct gl_shader {
@@ -59,6 +78,7 @@ struct gl_shader {
 	GLint tex_uniforms[3];
 	GLint alpha_uniform;
 	GLint color_uniform;
+	GLint csc_uniform;
 	struct wl_list link; /* gl_renderer::shader_list */
 };
 

@@ -132,6 +132,127 @@ static const char solid_fragment_shader[] =
 
 static const char fragment_brace[] = "}\n";
 
+/* eotfs */
+static const char eotf_srgb[] =
+	"float eotf_srgb_single(float c) {\n"
+	"    return c < 0.04045 ? c / 12.92 : pow(((c + 0.055) / 1.055), 2.4);\n"
+	"}\n"
+	"\n"
+	"vec3 eotf_srgb(vec3 color) {\n"
+	"    float r = eotf_srgb_single(color.r);\n"
+	"    float g = eotf_srgb_single(color.g);\n"
+	"    float b = eotf_srgb_single(color.b);\n"
+	"    return vec3(r, g, b);\n"
+	"}\n"
+	"\n"
+	"vec3 eotf(vec3 color) {\n"
+	"    return sign(color) * eotf_srgb(abs(color.rgb));\n"
+	"}\n"
+	"\n"
+	;
+
+static const char eotf_pq[] =
+	"vec3 eotf(vec3 v) {\n"
+	"    float m1 = 0.25 * 2610.0 / 4096.0;\n"
+	"    float m2 = 128.0 * 2523.0 / 4096.0;\n"
+	"    float c3 = 32.0 * 2392.0 / 4096.0;\n"
+	"    float c2 = 32.0 * 2413.0 / 4096.0;\n"
+	"    float c1 = c3 - c2 + 1.0;\n"
+	"    vec3 n = pow(v, vec3(1.0 / m2));\n"
+	"    return pow(max(n - c1, 0.0) / (c2 - c3 * n), vec3(1.0 / m1));\n"
+	"}\n"
+	"\n"
+	;
+
+static const char eotf_hlg[] =
+	"vec3 eotf(vec3 l) {\n"
+	"    float a = 0.17883277;\n"
+	"    float b = 1.0 - 4.0 * a;\n"
+	"    float c = 0.5 - a * log(4.0 * a);\n"
+	"    float x = step(1.0 / 2.0, l);\n"
+	"    vec3 v0 = pow(l, 2.0) / 3.0;\n"
+	"    vec3 v1 = (exp((l - c) / a) + b) / 12.0;\n"
+	"    return mix(v0, v1, x);\n"
+	"}\n"
+	"\n"
+	;
+
+static const char eotf_default[] =
+	"vec3 eotf(vec3 color) {\n"
+	"    return color;\n"
+	"}\n"
+	"\n"
+	;
+
+/* oetfs */
+static const char oetf_srgb[] =
+	"float oetf_srgb_single(float c) {\n"
+	"    float ret = 0.0;\n"
+	"    if (c < 0.0031308) {\n"
+	"        ret = 12.92 * c;\n"
+	"    } else {\n"
+	"        ret = 1.055 * pow(c, 1.0 / 2.4) - 0.055;\n"
+	"    }\n"
+	"    return ret;\n"
+	"}\n"
+	"\n"
+	"vec3 oetf_srgb(vec3 color) {\n"
+	"    float r = oetf_srgb_single(color.r);\n"
+	"    float g = oetf_srgb_single(color.g);\n"
+	"    float b = oetf_srgb_single(color.b);\n"
+	"    return vec3(r, g, b);\n"
+	"}\n"
+	"\n"
+	"vec3 oetf(vec3 linear) {\n"
+	"    return sign(linear) * oetf_srgb(abs(linear.rgb));\n"
+	"}\n"
+	"\n"
+	;
+
+static const char oetf_pq[] =
+	"vec3 oetf(vec3 l) {\n"
+	"    float m1 = 0.25 * 2610.0 / 4096.0;\n"
+	"    float m2 = 128.0 * 2523.0 / 4096.0;\n"
+	"    float c3 = 32.0 * 2392.0 / 4096.0;\n"
+	"    float c2 = 32.0 * 2413.0 / 4096.0;\n"
+	"    float c1 = c3 - c2 + 1.0;\n"
+	"    vec3 n = pow(l, vec3(m1));\n"
+	"    return pow((c1 + c2 * n) / (1.0 + c3 * n), vec3(m2));\n"
+	"}\n"
+	"\n"
+	;
+
+static const char oetf_hlg[] =
+	"vec3 oetf(vec3 l) {\n"
+	"    float a = 0.17883277;\n"
+	"    float b = 1.0 - 4.0 * a;\n"
+	"    float c = 0.5 - a * log(4.0 * a);\n"
+	"    float x = step(1.0 / 12.0, l);\n"
+	"    vec3 v0 = a * log(12.0 * l - b) + c;\n"
+	"    vec3 v1 = sqrt(3.0 * l);\n"
+	"    return mix(v0, v1, x);\n"
+	"}\n"
+	"\n"
+	;
+
+static const char oetf_default[] =
+	"vec3 oetf(vec3 color) {\n"
+	"    return color;\n"
+	"}\n"
+	"\n"
+	;
+
+static const char eotf_shader[] =
+	"    gl_FragColor.rgb = eotf(gl_FragColor.rgb);\n"
+	;
+
+static const char oetf_shader[] =
+	"    gl_FragColor.rgb = oetf(gl_FragColor.rgb);\n"
+	;
+
+static const char csc_shader[] =
+	"    gl_FragColor.rgb = clamp((csc * gl_FragColor.rgb), 0.0, 1.0);\n"
+	;
 struct gl_shader_source {
 	const char *parts[64];
 	uint32_t len;
@@ -142,6 +263,62 @@ gl_shader_source_add(struct gl_shader_source *shader_source, const char *str)
 {
 	shader_source->parts[shader_source->len++] = str;
 	assert(shader_source->len < ARRAY_LENGTH(shader_source->parts));
+}
+
+static void
+generate_fs_hdr_shader(struct gl_shader_source *shader_source,
+		       struct gl_shader_requirements *requirements)
+{
+	// Write the hdr uniforms
+	if (requirements->csc_matrix)
+		gl_shader_source_add(shader_source, "uniform mat3 csc;\n");
+
+	// Choose the EOTF
+	switch (requirements->degamma) {
+	case SHADER_DEGAMMA_SRGB:
+		gl_shader_source_add(shader_source, eotf_srgb);
+		break;
+	case SHADER_DEGAMMA_PQ:
+		gl_shader_source_add(shader_source, eotf_pq);
+		break;
+	case SHADER_DEGAMMA_HLG:
+		gl_shader_source_add(shader_source, eotf_hlg);
+		break;
+	default:
+		gl_shader_source_add(shader_source, eotf_default);
+		break;
+	}
+
+	// Choose the OETF
+	switch (requirements->gamma) {
+	case SHADER_GAMMA_SRGB:
+		gl_shader_source_add(shader_source, oetf_srgb);
+		break;
+	case SHADER_GAMMA_PQ:
+		gl_shader_source_add(shader_source, oetf_pq);
+		break;
+	case SHADER_GAMMA_HLG:
+		gl_shader_source_add(shader_source, oetf_hlg);
+		break;
+	default:
+		gl_shader_source_add(shader_source, oetf_default);
+		break;
+	}
+}
+
+static void
+generate_hdr_process_shader(struct gl_shader_source *shader_source,
+			    struct gl_shader_requirements *requirements)
+{
+	if (requirements->degamma)
+		gl_shader_source_add(shader_source, eotf_shader);
+
+	if (requirements->csc_matrix)
+		gl_shader_source_add(shader_source, csc_shader);
+
+	if (requirements->gamma)
+		gl_shader_source_add(shader_source, oetf_shader);
+
 }
 
 static void
@@ -258,11 +435,16 @@ generate_fragment_shader(struct gl_shader_generator *sg,
 	/* Write the header and required uniforms */
 	generate_fs_uniforms(shader_source, requirements);
 
+	// Write shaders needed for HDR
+	generate_fs_hdr_shader(shader_source, requirements);
+
 	/* begin main function */
 	gl_shader_source_add(shader_source, fragment_main_open);
 
 	/* Generate the shader based on variant */
 	generate_fs_variants(shader_source, requirements);
+
+	generate_hdr_process_shader(shader_source, requirements);
 
 	if (requirements->debug)
 		gl_shader_source_add(shader_source, fragment_debug);
@@ -363,6 +545,7 @@ gl_shader_create(struct gl_shader_generator *sg,
 	shader->tex_uniforms[2] = glGetUniformLocation(shader->program, "tex2");
 	shader->alpha_uniform = glGetUniformLocation(shader->program, "alpha");
 	shader->color_uniform = glGetUniformLocation(shader->program, "color");
+	shader->csc_uniform = glGetUniformLocation(shader->program, "csc");
 
 	return shader;
 }
