@@ -58,6 +58,7 @@
 #include "shared/timespec-util.h"
 #include "shared/weston-egl-ext.h"
 #include "gl-renderer-private.h"
+#include "shared/csc.h"
 
 #define GR_GL_VERSION(major, minor) \
 	(((uint32_t)(major) << 16) | (uint32_t)(minor))
@@ -782,6 +783,14 @@ shader_uniforms(struct gl_shader *shader,
 	int i;
 	struct gl_surface_state *gs = get_surface_state(view->surface);
 	struct gl_output_state *go = get_output_state(output);
+	struct weston_surface *surface = view->surface;
+	const struct weston_colorspace *src_cs, *dst_cs;
+	struct weston_matrix csc_matrix;
+	float csc[9] = {0};
+	float *dst;
+
+	// shader key contains the set of requirements used to build the shader
+	struct gl_shader_requirements *requirements = &shader->key;
 
 	glUniformMatrix4fv(shader->proj_uniform,
 			   1, GL_FALSE, go->output_matrix.d);
@@ -790,6 +799,21 @@ shader_uniforms(struct gl_shader *shader,
 
 	for (i = 0; i < gs->num_textures; i++)
 		glUniform1i(shader->tex_uniforms[i], i);
+
+	if (requirements->csc_matrix) {
+		weston_matrix_init(&csc_matrix);
+		src_cs = weston_colorspace_lookup(surface->colorspace);
+		dst_cs = weston_colorspace_lookup(go->target_colorspace);
+
+		weston_csc_matrix(&csc_matrix, dst_cs, src_cs, 1.0);
+		dst = csc_matrix.d;
+		for (i = 0; i < 3; i++) {
+			memcpy(csc + 3 * i, dst, 3 * sizeof(float));
+			dst += 4;
+		}
+		glUniformMatrix3fv(shader->csc_uniform, 1, GL_FALSE, csc);
+	}
+
 }
 
 static int
@@ -909,6 +933,62 @@ setup_censor_overrides(struct weston_output *output,
 }
 
 static void
+compute_hdr_requirements_from_view(struct weston_view *ev,
+				   struct weston_output *output)
+{
+	struct weston_surface *surface = ev->surface;
+	struct gl_renderer *gr = get_renderer(surface->compositor);
+	struct gl_surface_state *gs = get_surface_state(ev->surface);
+	struct gl_output_state *go = get_output_state(output);
+	struct weston_hdr_metadata *src_md = surface->hdr_metadata;
+	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
+	uint32_t target_colorspace = go->target_colorspace;
+	bool needs_csc = false;
+	uint32_t degamma = 0, gamma = 0;
+
+	// Start by assuming that we don't need color space conversion
+	gs->shader_requirements.csc_matrix = false;
+	needs_csc = surface->colorspace != target_colorspace;
+
+	if (needs_csc)
+		gs->shader_requirements.csc_matrix = true;
+
+	/* identify degamma curve from input metadata */
+	degamma = SHADER_DEGAMMA_SRGB;
+
+	if (src_md) {
+		switch (src_md->metadata.static_metadata.eotf) {
+		case WESTON_EOTF_ST2084:
+			degamma = SHADER_DEGAMMA_PQ;
+			break;
+		case WESTON_EOTF_HLG:
+			degamma = SHADER_DEGAMMA_HLG;
+			break;
+		}
+	}
+
+	gs->shader_requirements.degamma = degamma;
+
+	// If RGBA16F textures aren't supported, then we are forced to go for
+	// non linear blending
+	if (!gr->supports_half_float_texture) {
+		gamma = SHADER_GAMMA_SRGB;
+		if (dst_md) {
+			switch (dst_md->metadata.static_metadata.eotf) {
+			case WESTON_EOTF_ST2084:
+				gamma = SHADER_GAMMA_PQ;
+				break;
+			case WESTON_EOTF_HLG:
+				gamma = SHADER_GAMMA_HLG;
+				break;
+			}
+		}
+
+		gs->shader_requirements.gamma = gamma;
+	}
+}
+
+static void
 draw_view(struct weston_view *ev, struct weston_output *output,
 	  pixman_region32_t *damage) /* in global coordinates */
 {
@@ -931,6 +1011,8 @@ draw_view(struct weston_view *ev, struct weston_output *output,
 	 * have a valid buffer or a proper shader set up so skip rendering. */
 	if (!gs->shader_requirements.variant && !gs->direct_display)
 		return;
+
+	compute_hdr_requirements_from_view(ev, output);
 
 	pixman_region32_init(&repaint);
 	pixman_region32_intersect(&repaint,
@@ -1195,10 +1277,13 @@ draw_output_borders(struct weston_output *output,
 {
 	struct gl_output_state *go = get_output_state(output);
 	struct gl_renderer *gr = get_renderer(output->compositor);
+	uint32_t target_colorspace = go->target_colorspace;
+	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
 	struct gl_border_image *top, *bottom, *left, *right;
 	struct weston_matrix matrix;
 	int full_width, full_height;
 	struct gl_shader_requirements shader_requirements;
+	int gamma = 0;
 
 	if (border_status == BORDER_STATUS_CLEAN)
 		return; /* Clean. Nothing to do. */
@@ -1214,6 +1299,28 @@ draw_output_borders(struct weston_output *output,
 	glDisable(GL_BLEND);
 	gl_shader_requirements_init(&shader_requirements);
 	shader_requirements.variant = SHADER_VARIANT_RGBA;
+
+	// assuming that the borders are always BT709
+	if (target_colorspace != WESTON_CS_BT709)
+		shader_requirements.csc_matrix = true;
+	else
+		shader_requirements.csc_matrix = false;
+
+	shader_requirements.degamma = SHADER_DEGAMMA_SRGB;
+
+	gamma = SHADER_GAMMA_SRGB;
+	if (dst_md) {
+		switch (dst_md->metadata.static_metadata.eotf) {
+		case WESTON_EOTF_ST2084:
+			gamma = SHADER_GAMMA_PQ;
+			break;
+		case WESTON_EOTF_HLG:
+			gamma = SHADER_GAMMA_HLG;
+			break;
+		}
+	}
+	shader_requirements.gamma = gamma;
+
 	use_gl_program(gr, &shader_requirements);
 
 	glViewport(0, 0, full_width, full_height);
@@ -1418,9 +1525,10 @@ repaint_from_texture(struct weston_output *output,
 	struct gl_renderer *gr = get_renderer(output->compositor);
 	double width = output->current_mode->width;
 	double height = output->current_mode->height;
+	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
 	pixman_box32_t *rects;
 	int n_rects;
-	int i;
+	int i, gamma = 0;
 	struct gl_shader_requirements shader_requirements;
 
 	GLfloat verts[4 * 2] = { 0.0f };
@@ -1439,8 +1547,21 @@ repaint_from_texture(struct weston_output *output,
 		   output->current_mode->width,
 		   output->current_mode->height);
 
+	gamma = SHADER_GAMMA_SRGB;
+	if (dst_md) {
+		switch (dst_md->metadata.static_metadata.eotf) {
+		case WESTON_EOTF_ST2084:
+			gamma = SHADER_GAMMA_PQ;
+			break;
+		case WESTON_EOTF_HLG:
+			gamma = SHADER_GAMMA_HLG;
+			break;
+		}
+	}
+
 	gl_shader_requirements_init(&shader_requirements);
 	shader_requirements.variant = SHADER_VARIANT_RGBA;
+	shader_requirements.gamma = gamma;
 	use_gl_program(gr, &shader_requirements);
 
 	glUniformMatrix4fv(gr->current_shader->proj_uniform, 1, GL_FALSE, proj);

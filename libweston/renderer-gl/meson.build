@@ -8,6 +8,8 @@ srcs_renderer_gl = [
 	'egl-glue.c',
 	'gl-renderer.c',
 	'gl-shaders.c',
+	'../../shared/colorspace.c',
+	'../../shared/csc.c',
 	linux_dmabuf_unstable_v1_protocol_c,
 	linux_dmabuf_unstable_v1_server_protocol_h,
 ]
