@@ -921,6 +921,12 @@ struct weston_renderer {
 	void (*query_dmabuf_modifiers)(struct weston_compositor *ec,
 				int format, uint64_t **modifiers,
 				int *num_modifiers);
+
+	void (*set_output_colorspace)(struct weston_output *output,
+				      uint32_t colorspace);
+
+	void (*set_output_hdr_metadata)(struct weston_output *output,
+					struct weston_hdr_metadata *metadata);
 };
 
 enum weston_capability {
