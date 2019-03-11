@@ -784,10 +784,16 @@ shader_uniforms(struct gl_shader *shader,
 	struct gl_surface_state *gs = get_surface_state(view->surface);
 	struct gl_output_state *go = get_output_state(output);
 	struct weston_surface *surface = view->surface;
+	struct weston_hdr_metadata *src_md = surface->hdr_metadata;
+	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
+	struct weston_hdr_metadata_static *static_metadata;
 	const struct weston_colorspace *src_cs, *dst_cs;
 	struct weston_matrix csc_matrix;
 	float csc[9] = {0};
 	float *dst;
+	uint32_t display_max_luminance;
+	uint32_t content_max_luminance;
+	uint32_t content_min_luminance;
 
 	// shader key contains the set of requirements used to build the shader
 	struct gl_shader_requirements *requirements = &shader->key;
@@ -814,6 +820,26 @@ shader_uniforms(struct gl_shader *shader,
 		glUniformMatrix3fv(shader->csc_uniform, 1, GL_FALSE, csc);
 	}
 
+	switch(requirements->tone_mapping) {
+	case SHADER_TONE_MAP_HDR_TO_HDR:
+		static_metadata = &src_md->metadata.static_metadata;
+		content_max_luminance = static_metadata->max_luminance;
+		content_min_luminance = static_metadata->min_luminance;
+		glUniform1f(shader->content_max_luminance,
+			    content_max_luminance);
+		glUniform1f(shader->content_min_luminance,
+			    content_min_luminance);
+		/* fallthrough */
+	case SHADER_TONE_MAP_SDR_TO_HDR:
+		static_metadata = &dst_md->metadata.static_metadata;
+		display_max_luminance = static_metadata->max_luminance;
+		glUniform1f(shader->display_max_luminance,
+			    display_max_luminance);
+		break;
+	default:
+		glUniform1f(shader->display_max_luminance, 1.0);
+		break;
+	}
 }
 
 static int
@@ -943,12 +969,18 @@ compute_hdr_requirements_from_view(struct weston_view *ev,
 	struct weston_hdr_metadata *src_md = surface->hdr_metadata;
 	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
 	uint32_t target_colorspace = go->target_colorspace;
-	bool needs_csc = false;
+	bool needs_csc = false, needs_tm = false;
 	uint32_t degamma = 0, gamma = 0;
+	enum gl_shader_tone_map_variant tone_map_type = SHADER_TONE_MAP_NONE;
 
-	// Start by assuming that we don't need color space conversion
+	/* Start by assuming that we don't need color space conversion */
+	/* and tone mapping. This resets the csc and tone mapping requirements */
+	/* when the hdr requirements for the surface are removed. */
 	gs->shader_requirements.csc_matrix = false;
+	gs->shader_requirements.tone_mapping = SHADER_TONE_MAP_NONE;
+
 	needs_csc = surface->colorspace != target_colorspace;
+	needs_tm = src_md || dst_md;
 
 	if (needs_csc)
 		gs->shader_requirements.csc_matrix = true;
@@ -969,6 +1001,22 @@ compute_hdr_requirements_from_view(struct weston_view *ev,
 
 	gs->shader_requirements.degamma = degamma;
 
+	if (needs_tm) {
+		if (dst_md) {
+			if (src_md)
+				tone_map_type = SHADER_TONE_MAP_HDR_TO_HDR;
+			else
+				tone_map_type = SHADER_TONE_MAP_SDR_TO_HDR;
+		} else {
+			if (src_md)
+				tone_map_type = SHADER_TONE_MAP_HDR_TO_SDR;
+			else
+				tone_map_type = SHADER_TONE_MAP_NONE;
+		}
+	}
+
+	gs->shader_requirements.tone_mapping = tone_map_type;
+
 	// If RGBA16F textures aren't supported, then we are forced to go for
 	// non linear blending
 	if (!gr->supports_half_float_texture) {
@@ -984,6 +1032,7 @@ compute_hdr_requirements_from_view(struct weston_view *ev,
 			}
 		}
 
+		gs->shader_requirements.nl_variant = gamma;
 		gs->shader_requirements.gamma = gamma;
 	}
 }
@@ -1321,6 +1370,9 @@ draw_output_borders(struct weston_output *output,
 	}
 	shader_requirements.gamma = gamma;
 
+	if (dst_md)
+		shader_requirements.tone_mapping = SHADER_TONE_MAP_SDR_TO_HDR;
+
 	use_gl_program(gr, &shader_requirements);
 
 	glViewport(0, 0, full_width, full_height);
@@ -1333,6 +1385,8 @@ draw_output_borders(struct weston_output *output,
 
 	glUniform1i(gr->current_shader->tex_uniforms[0], 0);
 	glUniform1f(gr->current_shader->alpha_uniform, 1);
+	glUniform1f(gr->current_shader->display_max_luminance, 1.0);
+
 	glActiveTexture(GL_TEXTURE0);
 
 	if (border_status & BORDER_TOP_DIRTY)
@@ -1561,6 +1615,7 @@ repaint_from_texture(struct weston_output *output,
 
 	gl_shader_requirements_init(&shader_requirements);
 	shader_requirements.variant = SHADER_VARIANT_RGBA;
+	shader_requirements.nl_variant = gamma;
 	shader_requirements.gamma = gamma;
 	use_gl_program(gr, &shader_requirements);
 
@@ -1568,6 +1623,7 @@ repaint_from_texture(struct weston_output *output,
 	glUniform1f(gr->current_shader->alpha_uniform, 1.0f);
 
 	glUniform1i(gr->current_shader->tex_uniforms[0], 0);
+	glUniform1f(gr->current_shader->display_max_luminance, 1.0);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, go->shadow_tex);
