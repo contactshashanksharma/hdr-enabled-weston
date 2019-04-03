@@ -61,13 +61,22 @@ enum gl_shader_gamma_variant {
 	SHADER_GAMMA_HLG,
 };
 
+enum gl_shader_tone_map_variant {
+	SHADER_TONE_MAP_NONE = 0,
+	SHADER_TONE_MAP_HDR_TO_SDR,
+	SHADER_TONE_MAP_SDR_TO_HDR,
+	SHADER_TONE_MAP_HDR_TO_HDR,
+};
+
 struct gl_shader_requirements
 {
 	enum gl_shader_texture_variant variant;
 	bool debug;
 	bool csc_matrix;
 	enum gl_shader_degamma_variant degamma;
+	enum gl_shader_gamma_variant nl_variant;
 	enum gl_shader_gamma_variant gamma;
+	enum gl_shader_tone_map_variant tone_mapping;
 };
 
 struct gl_shader {
@@ -79,6 +88,9 @@ struct gl_shader {
 	GLint alpha_uniform;
 	GLint color_uniform;
 	GLint csc_uniform;
+	GLint display_max_luminance;
+	GLint content_max_luminance;
+	GLint content_min_luminance;
 	struct wl_list link; /* gl_renderer::shader_list */
 };
 
