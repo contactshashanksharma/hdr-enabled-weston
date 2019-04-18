@@ -32,6 +32,11 @@
 #include <libweston/libweston.h>
 #include "gl-renderer-private.h"
 #include "shared/helpers.h"
+#include "libweston/weston-log.h"
+
+struct gl_shader_generator {
+	struct weston_log_scope *debug;
+};
 
 static const char vertex_shader[] =
 	"uniform mat4 proj;\n"
@@ -223,11 +228,33 @@ generate_fs_variants(struct gl_shader_source *shader_source,
 }
 
 static void
-generate_fragment_shader(struct gl_shader_source *shader_source,
-			 struct gl_shader_requirements *requirements)
+log_shader(struct gl_shader_generator *sg,
+	   struct gl_shader_source *shader_source)
 {
+	char *str;
+	FILE *fp;
+	size_t len;
 	uint32_t i;
 
+	fp = open_memstream(&str, &len);
+	assert(fp);
+
+	fprintf(fp, "Generated shader length: %d, shader:\n", shader_source->len);
+	for(i = 0; i < shader_source->len; i++) {
+		fprintf(fp, "%s", shader_source->parts[i]);
+	}
+	fprintf(fp, "\n");
+	fclose(fp);
+
+	weston_log_scope_printf(sg->debug, "%s", str);
+	free(str);
+}
+
+static void
+generate_fragment_shader(struct gl_shader_generator *sg,
+			 struct gl_shader_source *shader_source,
+			 struct gl_shader_requirements *requirements)
+{
 	/* Write the header and required uniforms */
 	generate_fs_uniforms(shader_source, requirements);
 
@@ -242,11 +269,7 @@ generate_fragment_shader(struct gl_shader_source *shader_source,
 
 	gl_shader_source_add(shader_source, fragment_brace);
 
-	weston_log("Generated shader length: %d, shader:\n", shader_source->len);
-	for(i = 0; i < shader_source->len; i++) {
-		weston_log_continue("%s", shader_source->parts[i]);
-	}
-	weston_log_continue("\n");
+	log_shader(sg, shader_source);
 }
 
 void
@@ -290,7 +313,8 @@ compile_shader(GLenum type, int count, const char **sources)
 }
 
 struct gl_shader *
-gl_shader_create(struct gl_shader_requirements *requirements)
+gl_shader_create(struct gl_shader_generator *sg,
+		 struct gl_shader_requirements *requirements)
 {
 	struct gl_shader *shader = NULL;
 	char msg[512];
@@ -310,7 +334,7 @@ gl_shader_create(struct gl_shader_requirements *requirements)
 	vertex_source[0] = vertex_shader;
 
 	fragment_source.len = 0;
-	generate_fragment_shader(&fragment_source, requirements);
+	generate_fragment_shader(sg, &fragment_source, requirements);
 
 	shader->vertex_shader = compile_shader(GL_VERTEX_SHADER, 1,
 					       vertex_source);
@@ -341,4 +365,22 @@ gl_shader_create(struct gl_shader_requirements *requirements)
 	shader->color_uniform = glGetUniformLocation(shader->program, "color");
 
 	return shader;
+}
+
+struct gl_shader_generator *
+gl_shader_generator_create(struct weston_compositor *compositor)
+{
+	struct gl_shader_generator *sg = zalloc(sizeof *sg);
+	sg->debug = weston_compositor_add_log_scope(compositor, "gl-shader-generator",
+						      "Debug messages from GL renderer",
+						      NULL, NULL, NULL);
+	return sg;
+}
+
+void
+gl_shader_generator_destroy(struct gl_shader_generator *sg)
+{
+	weston_log_scope_destroy(sg->debug);
+	sg->debug = NULL;
+	free(sg);
 }

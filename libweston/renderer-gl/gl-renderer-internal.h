@@ -108,6 +108,7 @@ struct gl_renderer {
 	struct wl_list shader_list;
 
 	bool supports_half_float_texture;
+	struct gl_shader_generator *sg;
 };
 
 static inline struct gl_renderer *

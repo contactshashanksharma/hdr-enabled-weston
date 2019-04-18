@@ -62,6 +62,8 @@ struct gl_shader {
 	struct wl_list link; /* gl_renderer::shader_list */
 };
 
+struct gl_shader_generator;
+
 void
 gl_shader_requirements_init(struct gl_shader_requirements *requirements);
 
@@ -69,6 +71,13 @@ void
 gl_shader_destroy(struct gl_shader *shader);
 
 struct gl_shader *
-gl_shader_create(struct gl_shader_requirements *requirements);
+gl_shader_create(struct gl_shader_generator *sg,
+		 struct gl_shader_requirements *requirements);
+
+struct gl_shader_generator *
+gl_shader_generator_create(struct weston_compositor *compositor);
+
+void
+gl_shader_generator_destroy(struct gl_shader_generator *sg);
 
 #endif
