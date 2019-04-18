@@ -30,16 +30,6 @@
 #include <GLES2/gl2ext.h>
 #include "shared/weston-egl-ext.h"  /* for PFN* stuff */
 
-struct gl_shader {
-	GLuint program;
-	GLuint vertex_shader, fragment_shader;
-	GLint proj_uniform;
-	GLint tex_uniforms[3];
-	GLint alpha_uniform;
-	GLint color_uniform;
-	const char *vertex_source, *fragment_source;
-};
-
 struct gl_renderer {
 	struct weston_renderer base;
 	bool fragment_shader_debug;
@@ -93,15 +83,6 @@ struct gl_renderer {
 
 	bool has_gl_texture_rg;
 
-	struct gl_shader texture_shader_rgba;
-	struct gl_shader texture_shader_rgbx;
-	struct gl_shader texture_shader_egl_external;
-	struct gl_shader texture_shader_y_uv;
-	struct gl_shader texture_shader_y_u_v;
-	struct gl_shader texture_shader_y_xuxv;
-	struct gl_shader texture_shader_xyuv;
-	struct gl_shader invert_color_shader;
-	struct gl_shader solid_shader;
 	struct gl_shader *current_shader;
 
 	struct wl_signal destroy_signal;
@@ -119,6 +100,12 @@ struct gl_renderer {
 
 	bool has_wait_sync;
 	PFNEGLWAITSYNCKHRPROC wait_sync;
+
+	/** struct gl_shader::link
+	 *
+	 * List constains cached shaders built from struct gl_shader_requirements
+	 */
+	struct wl_list shader_list;
 };
 
 static inline struct gl_renderer *
