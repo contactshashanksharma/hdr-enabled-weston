@@ -106,6 +106,8 @@ struct gl_renderer {
 	 * List constains cached shaders built from struct gl_shader_requirements
 	 */
 	struct wl_list shader_list;
+
+	bool supports_half_float_texture;
 };
 
 static inline struct gl_renderer *
