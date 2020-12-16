@@ -2143,6 +2143,8 @@ err_alloc:
 static void
 drm_head_destroy(struct drm_head *head)
 {
+	struct drm_backend *b = head->backend;
+
 	weston_head_release(&head->base);
 
 	drm_property_info_free(head->props_conn, WDRM_CONNECTOR__COUNT);
@@ -2153,6 +2155,9 @@ drm_head_destroy(struct drm_head *head)
 
 	if (head->backlight)
 		backlight_destroy(head->backlight);
+
+	if (head->color_state.hdr_md_blob_id)
+		drmModeDestroyPropertyBlob(b->drm.fd, head->color_state.hdr_md_blob_id);
 
 	free(head);
 }
