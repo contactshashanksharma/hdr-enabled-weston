@@ -713,6 +713,7 @@ gl_shader_create(struct gl_shader_generator *sg,
 	if (!status) {
 		glGetProgramInfoLog(shader->program, sizeof msg, NULL, msg);
 		weston_log("link info: %s\n", msg);
+		free(shader);
 		return NULL;
 	}
 
@@ -737,9 +738,11 @@ struct gl_shader_generator *
 gl_shader_generator_create(struct weston_compositor *compositor)
 {
 	struct gl_shader_generator *sg = zalloc(sizeof *sg);
-	sg->debug = weston_compositor_add_log_scope(compositor, "gl-shader-generator",
-						      "Debug messages from GL renderer",
-						      NULL, NULL, NULL);
+
+	if (sg)
+		sg->debug = weston_compositor_add_log_scope(compositor, "gl-shader-generator",
+							    "Debug messages from GL renderer",
+							    NULL, NULL, NULL);
 	return sg;
 }
 

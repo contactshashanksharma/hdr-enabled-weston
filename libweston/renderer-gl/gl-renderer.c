@@ -3778,6 +3778,7 @@ fail_with_error:
 fail_terminate:
 	eglTerminate(gr->egl_display);
 fail:
+	gl_shader_generator_destroy(gr->sg);
 	free(gr);
 	ec->renderer = NULL;
 	return -1;
