@@ -478,22 +478,29 @@ generate_hdr_process_shader(struct gl_shader_source *shader_source,
 		(requirements->tone_mapping == SHADER_TONE_MAP_HDR_TO_HDR) ||
 		(requirements->tone_mapping == SHADER_TONE_MAP_SDR_TO_HDR);
 
-	if (requirements->degamma)
+	uint32_t need_linear_conversion = requirements->csc_matrix |
+					  requirements->tone_mapping;
+
+	if (need_linear_conversion && requirements->degamma)
 		gl_shader_source_add(shader_source, eotf_shader);
 
-	if (requirements->csc_matrix)
+	if (requirements->csc_matrix) {
 		gl_shader_source_add(shader_source, csc_shader);
+	}
 
-	if (requirements->degamma && need_range_increment)
+	if (requirements->degamma && need_range_increment) {
 		gl_shader_source_add(shader_source, sl_shader);
+	}
 
-	if (requirements->tone_mapping)
+	if (requirements->tone_mapping) {
 		gl_shader_source_add(shader_source, hdr_shader);
+	}
 
-	if (requirements->nl_variant)
+	if (need_linear_conversion && requirements->nl_variant) {
 		gl_shader_source_add(shader_source, nl_shader);
+	}
 
-	if (requirements->gamma)
+	if (need_linear_conversion && requirements->gamma)
 		gl_shader_source_add(shader_source, oetf_shader);
 
 }
