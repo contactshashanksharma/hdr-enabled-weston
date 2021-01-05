@@ -47,7 +47,6 @@ enum gl_shader_texture_variant {
 
 enum gl_shader_degamma_variant {
 	SHADER_DEGAMMA_NONE = 0,
-	SHADER_DEGAMMA_LINEAR,
 	SHADER_DEGAMMA_SRGB,
 	SHADER_DEGAMMA_PQ,
 	SHADER_DEGAMMA_HLG,
@@ -55,7 +54,6 @@ enum gl_shader_degamma_variant {
 
 enum gl_shader_gamma_variant {
 	SHADER_GAMMA_NONE = 0,
-	SHADER_GAMMA_LINEAR,
 	SHADER_GAMMA_SRGB,
 	SHADER_GAMMA_PQ,
 	SHADER_GAMMA_HLG,
