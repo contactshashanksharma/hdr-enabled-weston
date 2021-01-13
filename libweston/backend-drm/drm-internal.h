@@ -45,6 +45,7 @@
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <drm.h>
 #include <drm_fourcc.h>
 
 #ifdef BUILD_DRM_GBM
@@ -519,36 +520,13 @@ enum drm_colorspace {
 	DRM_COLORSPACE_MAX,
 };
 
-/* Static HDR metadata to be sent to kernel, matches kernel structure */
-struct drm_hdr_metadata_static {
-	uint8_t eotf;
-	uint8_t metadata_type;
-	struct {
-		uint16_t x, y;
-	} display_primaries[3];
-	struct {
-		uint16_t x, y;
-	} white_point;
-	uint16_t max_display_mastering_luminance;
-	uint16_t min_display_mastering_luminance;
-	uint16_t max_cll;
-	uint16_t max_fall;
-};
-
-struct hdr_output_metadata {
-	uint32_t metadata_type;
-	union {
-		struct drm_hdr_metadata_static static_md;
-	};
-};
-
 /* Connector's color correction status */
 struct drm_conn_color_state {
 	bool changed;
 	uint8_t o_cs;
 	uint8_t o_eotf;
 	uint32_t hdr_md_blob_id;
-	struct drm_hdr_metadata_static o_md;
+	struct hdr_metadata_infoframe o_md;
 };
 
 struct drm_head {

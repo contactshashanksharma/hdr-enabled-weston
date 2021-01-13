@@ -298,7 +298,7 @@ drm_output_render_gl(struct drm_output_state *state, pixman_region32_t *damage)
 	struct drm_fb *ret;
 	struct weston_head *w_head = weston_output_get_first_head(&output->base);
 	struct drm_head *head = to_drm_head(w_head);
-	struct drm_hdr_metadata_static *dmd = &head->color_state.o_md;
+	struct hdr_metadata_infoframe *dmd = &head->color_state.o_md;
 	uint32_t target_cs = drm_cs_to_weston_cs(head->color_state.o_cs);
 	struct weston_hdr_metadata whm = {0};
 	struct weston_renderer *renderer = output->base.compositor->renderer;

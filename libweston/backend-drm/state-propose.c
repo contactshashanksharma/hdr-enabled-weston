@@ -1041,7 +1041,7 @@ static void
 drm_prepare_output_hdr_metadata(struct drm_backend *b,
 				struct drm_head *head,
 				struct weston_hdr_metadata *surface_md,
-				struct drm_hdr_metadata_static *out_md)
+				struct hdr_metadata_infoframe *out_md)
 {
 	struct weston_hdr_metadata_static *c_md;
 	struct drm_edid_hdr_metadata_static *d_md;
@@ -1087,7 +1087,7 @@ drm_head_prepare_hdr_metadata_blob(struct drm_backend *b,
 					hdr_surf->hdr_metadata,
 					&target->o_md);
 
-	memcpy(&output_metadata.static_md, &target->o_md, sizeof (target->o_md));
+	memcpy(&output_metadata.hdmi_metadata_type1, &target->o_md, sizeof (target->o_md));
 
 	/* create blob to be set during next commit */
 	ret = drmModeCreatePropertyBlob(b->drm.fd,
