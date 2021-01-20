@@ -54,8 +54,9 @@ weston_launcher_connect(struct weston_compositor *compositor, int tty,
 		const struct launcher_interface *iface = *it;
 		struct weston_launcher *launcher;
 
-		if (iface->connect(&launcher, compositor, tty, seat_id, sync_drm) == 0)
+		if (iface->connect(&launcher, compositor, tty, seat_id, sync_drm) == 0) {
 			return launcher;
+		}
 	}
 
 	return NULL;

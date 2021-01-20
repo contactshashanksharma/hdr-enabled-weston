@@ -699,7 +699,9 @@ usage(int error_code)
 		"\tnormal 90 180 270 flipped flipped-90 flipped-180 flipped-270\n"
 		"  --use-pixman\t\tUse the pixman (CPU) renderer (default: no rendering)\n"
 		"  --use-gl\t\tUse the GL renderer (default: no rendering)\n"
+		"  --use-gbm\t\tUse the GL renderer with GBM (default: no rendering)\n"
 		"  --no-outputs\t\tDo not create any virtual outputs\n"
+		"  --tty=TTY\t\tThe tty to use\n"
 		"\n");
 #endif
 
@@ -2594,6 +2596,8 @@ load_headless_backend(struct weston_compositor *c,
 				       false);
 	weston_config_section_get_bool(section, "use-gl", &config.use_gl,
 				       false);
+	weston_config_section_get_bool(section, "use-gbm", &config.use_gbm,
+				       false);
 
 	const struct weston_option options[] = {
 		{ WESTON_OPTION_INTEGER, "width", 0, &parsed_options->width },
@@ -2601,6 +2605,8 @@ load_headless_backend(struct weston_compositor *c,
 		{ WESTON_OPTION_INTEGER, "scale", 0, &parsed_options->scale },
 		{ WESTON_OPTION_BOOLEAN, "use-pixman", 0, &config.use_pixman },
 		{ WESTON_OPTION_BOOLEAN, "use-gl", 0, &config.use_gl },
+		{ WESTON_OPTION_BOOLEAN, "use-gbm", 0, &config.use_gbm },
+		{ WESTON_OPTION_INTEGER, "tty", 0, &config.tty },
 		{ WESTON_OPTION_STRING, "transform", 0, &transform },
 		{ WESTON_OPTION_BOOLEAN, "no-outputs", 0, &no_outputs },
 	};
@@ -2617,6 +2623,7 @@ load_headless_backend(struct weston_compositor *c,
 
 	config.base.struct_version = WESTON_HEADLESS_BACKEND_CONFIG_VERSION;
 	config.base.struct_size = sizeof(struct weston_headless_backend_config);
+	config.configure_device = configure_input_device;
 
 	wet_set_simple_head_configurator(c, headless_backend_output_configure);
 
@@ -2638,6 +2645,8 @@ load_headless_backend(struct weston_compositor *c,
 		if (api->create_head(c, "headless") < 0)
 			return -1;
 	}
+
+	load_remoting(c, wc);
 
 	return 0;
 }

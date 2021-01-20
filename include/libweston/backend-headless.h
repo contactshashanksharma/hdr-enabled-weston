@@ -33,6 +33,9 @@ extern "C" {
 #include <stdint.h>
 
 #include <libweston/libweston.h>
+#include <libweston/backend.h>
+#include <libweston/backend-drm.h>
+#include <libweston/plugin-registry.h>
 
 #define WESTON_HEADLESS_BACKEND_CONFIG_VERSION 2
 
@@ -44,7 +47,34 @@ struct weston_headless_backend_config {
 
 	/** Whether to use the GL renderer, conflicts with use_pixman */
 	bool use_gl;
+
+	/** Whether to use the GL renderer with GBM */
+	bool use_gbm;
+
+	/** The tty to be used. Set to 0 to use the current tty. */
+        int tty;
+
+	/** Callback used to configure input devices.
+	 *
+	 * This function will be called by the backend when a new input device
+	 * needs to be configured.
+	 * If NULL the device will use the default configuration.
+	 */
+	void (*configure_device)(struct weston_compositor *compositor,
+				 struct libinput_device *device);
 };
+
+#define WESTON_HEADLESS_VIRTUAL_OUTPUT_API_NAME "weston_headless_virtual_output_api_v1"
+
+static inline const struct weston_drm_virtual_output_api *
+weston_headless_virtual_output_get_api(struct weston_compositor *compositor)
+{
+	const void *api;
+	api = weston_plugin_api_get(compositor,
+				    WESTON_HEADLESS_VIRTUAL_OUTPUT_API_NAME,
+				    sizeof(struct weston_drm_virtual_output_api));
+	return (const struct weston_drm_virtual_output_api *)api;
+}
 
 #ifdef  __cplusplus
 }
