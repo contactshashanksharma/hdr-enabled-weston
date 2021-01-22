@@ -727,8 +727,6 @@ headless_backend_create(struct weston_compositor *compositor,
 
 err_input:
 	weston_compositor_shutdown(compositor);
-
-err_udev_input:
 	udev_input_destroy(&b->input);
 err_launcher:
 	weston_launcher_destroy(compositor->launcher);

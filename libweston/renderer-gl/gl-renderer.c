@@ -963,7 +963,6 @@ compute_hdr_requirements_from_view(struct weston_view *ev,
 				   struct weston_output *output)
 {
 	struct weston_surface *surface = ev->surface;
-	struct gl_renderer *gr = get_renderer(surface->compositor);
 	struct gl_surface_state *gs = get_surface_state(ev->surface);
 	struct gl_output_state *go = get_output_state(output);
 	struct weston_hdr_metadata *src_md = surface->hdr_metadata;
@@ -1567,89 +1566,6 @@ pixman_region_to_egl_y_invert(struct weston_output *output,
 	pixman_region32_fini(&transformed);
 }
 
-static void
-repaint_from_texture(struct weston_output *output,
-		     pixman_region32_t *output_damage)
-{
-	struct gl_output_state *go = get_output_state(output);
-	struct gl_renderer *gr = get_renderer(output->compositor);
-	double width = output->current_mode->width;
-	double height = output->current_mode->height;
-	struct weston_hdr_metadata *dst_md = go->target_hdr_metadata;
-	pixman_box32_t *rects;
-	int n_rects;
-	int i, gamma = 0;
-	struct gl_shader_requirements shader_requirements;
-
-	GLfloat verts[4 * 2] = { 0.0f };
-
-	static const GLfloat proj[16] = { /* transpose */
-		2.0f,  0.0f, 0.0f, 0.0f,
-		0.0f,  2.0f, 0.0f, 0.0f,
-		0.0f,  0.0f, 1.0f, 0.0f,
-		-1.0f, -1.0f, 0.0f, 1.0f
-	};
-
-	/* Bind default framebuffer */
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(go->borders[GL_RENDERER_BORDER_LEFT].width,
-		   go->borders[GL_RENDERER_BORDER_BOTTOM].height,
-		   output->current_mode->width,
-		   output->current_mode->height);
-
-	gamma = SHADER_GAMMA_SRGB;
-	if (dst_md) {
-		switch (dst_md->metadata.static_metadata.eotf) {
-		case WESTON_EOTF_ST2084:
-			gamma = SHADER_GAMMA_PQ;
-			break;
-		case WESTON_EOTF_HLG:
-			gamma = SHADER_GAMMA_HLG;
-			break;
-		}
-	}
-
-	gl_shader_requirements_init(&shader_requirements);
-	shader_requirements.variant = SHADER_VARIANT_RGBA;
-	shader_requirements.nl_variant = gamma;
-	shader_requirements.gamma = gamma;
-	use_gl_program(gr, &shader_requirements);
-
-	glUniformMatrix4fv(gr->current_shader->proj_uniform, 1, GL_FALSE, proj);
-	glUniform1f(gr->current_shader->alpha_uniform, 1.0f);
-
-	glUniform1i(gr->current_shader->tex_uniforms[0], 0);
-	glUniform1f(gr->current_shader->display_max_luminance, 1.0);
-
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, go->shadow_tex);
-
-	rects = pixman_region32_rectangles(output_damage, &n_rects);
-	for (i = 0; i < n_rects; i++) {
-
-		verts[0] = rects[i].x1 / width;
-		verts[1] = (height - rects[i].y1) / height;
-		verts[2] = rects[i].x2 / width;
-		verts[3] = (height - rects[i].y1) / height;
-
-		verts[4] = rects[i].x2 / width;
-		verts[5] = (height - rects[i].y2) / height;
-		verts[6] = rects[i].x1 / width;
-		verts[7] = (height - rects[i].y2) / height;
-
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, verts);
-		glEnableVertexAttribArray(0);
-
-		/* texcoord: */
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, verts);
-		glEnableVertexAttribArray(1);
-
-		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-	}
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-}
-
 /* NOTE: We now allow falling back to ARGB gl visuals when XRGB is
  * unavailable, so we're assuming the background has no transparency
  * and that everything with a blend, like drop shadows, will have something
@@ -1674,7 +1590,7 @@ gl_renderer_repaint_output(struct weston_output *output,
 	enum gl_border_status border_status = BORDER_STATUS_CLEAN;
 	struct weston_view *view;
 	pixman_region32_t full_damage;
-	pixman_region32_t *repaint_damage, *repaint_texture_damage;
+	pixman_region32_t *repaint_damage;
 
 	if (use_output(output) < 0)
 		return;
@@ -3343,11 +3259,7 @@ gl_renderer_output_create(struct weston_output *output,
 			  EGLSurface surface)
 {
 	struct gl_output_state *go;
-	struct gl_renderer *gr = get_renderer(output->compositor);
 	int i;
-	int width = output->current_mode->width;
-	int height = output->current_mode->height;
-	int fb_status;
 
 	go = zalloc(sizeof *go);
 	if (go == NULL)
@@ -3784,7 +3696,6 @@ gl_renderer_setup(struct weston_compositor *ec, EGLSurface egl_surface)
 	struct gl_renderer *gr = get_renderer(ec);
 	const char *extensions;
 	EGLBoolean ret;
-	EGLint major_version;
 
 	EGLint context_attribs[16] = {
 		EGL_CONTEXT_CLIENT_VERSION, 0,
