@@ -163,6 +163,10 @@ lookup_remoted_output(struct weston_output *output)
 	struct weston_remoting *remoting = weston_remoting_get(c);
 	struct remoted_output *remoted_output;
 
+	if(!remoting) {
+		return NULL;
+	}
+
 	wl_list_for_each(remoted_output, &remoting->output_list, link) {
 		if (remoted_output->output == output)
 			return remoted_output;
@@ -192,16 +196,18 @@ remoting_output_fence_sync_handler(int fd, uint32_t mask, void *data)
 		frame = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
 				remoting->fd, 0);
 
-		sync.flags = DMA_BUF_SYNC_START;
-		sync.flags |= DMA_BUF_SYNC_READ;
-		ioctl(remoting->fd, DMA_BUF_IOCTL_SYNC, &sync);
+		if(frame) {
+			sync.flags = DMA_BUF_SYNC_START;
+			sync.flags |= DMA_BUF_SYNC_READ;
+			ioctl(remoting->fd, DMA_BUF_IOCTL_SYNC, &sync);
 
-		memcpy(d, frame, size);
+			memcpy(d, frame, size);
 
-		sync.flags = DMA_BUF_SYNC_END;
-		ioctl(remoting->fd, DMA_BUF_IOCTL_SYNC, &sync);
+			sync.flags = DMA_BUF_SYNC_END;
+			ioctl(remoting->fd, DMA_BUF_IOCTL_SYNC, &sync);
 
-		munmap(frame, size);
+			munmap(frame, size);
+		}
 		wl_resource_for_each(resource, &remoting->resource_list) {
 			lg_remote_send_done(resource);
 		}
@@ -225,14 +231,16 @@ remoting_output_frame(struct weston_output *output_base, int fd, int stride,
 		      void *output_buffer)
 {
 	struct remoted_output *output = lookup_remoted_output(output_base);
-	struct weston_remoting *remoting = output->remoting;
-	const struct weston_drm_virtual_output_api *api
-		= output->remoting->virtual_output_api;
+	struct weston_remoting *remoting;
+	const struct weston_drm_virtual_output_api *api;
 	struct wl_event_loop *loop;
 	struct mem_free_cb_data *cb_data;
 
 	if (!output)
 		return -1;
+
+	remoting = output->remoting;
+	api = remoting->virtual_output_api;
 
 	cb_data = zalloc(sizeof *cb_data);
 	if (!cb_data)
@@ -266,6 +274,10 @@ remoting_output_destroy(struct weston_output *output)
 	struct remoted_output *remoted_output = lookup_remoted_output(output);
 	struct weston_mode *mode, *next;
 
+	if(!remoted_output) {
+		return;
+	}
+
 	wl_list_for_each_safe(mode, next, &output->mode_list, link) {
 		wl_list_remove(&mode->link);
 		free(mode);
@@ -285,6 +297,10 @@ remoting_output_start_repaint_loop(struct weston_output *output)
 	struct remoted_output *remoted_output = lookup_remoted_output(output);
 	int64_t msec;
 
+	if(!remoted_output) {
+		return -1;
+	}
+
 	remoted_output->saved_start_repaint_loop(output);
 
 	msec = millihz_to_nsec(remoted_output->output->current_mode->refresh)
@@ -299,11 +315,13 @@ remoting_output_enable(struct weston_output *output)
 {
 	struct remoted_output *remoted_output = lookup_remoted_output(output);
 	struct weston_compositor *c = output->compositor;
-	const struct weston_drm_virtual_output_api *api
-		= remoted_output->remoting->virtual_output_api;
 	struct wl_event_loop *loop;
 	int ret;
 
+	if(!remoted_output) {
+		return -1;
+	}
+	const struct weston_drm_virtual_output_api *api = remoted_output->remoting->virtual_output_api;
 	api->set_submit_frame_cb(output, remoting_output_frame);
 
 	ret = remoted_output->saved_enable(output);
@@ -327,6 +345,10 @@ remoting_output_disable(struct weston_output *output)
 {
 	struct remoted_output *remoted_output = lookup_remoted_output(output);
 
+	if(!remoted_output) {
+		return -1;
+	}
+
 	wl_event_source_remove(remoted_output->finish_frame_timer);
 
 	return remoted_output->saved_disable(output);
@@ -344,7 +366,7 @@ remoting_output_create(struct weston_compositor *c, char *name)
 	const char *serial_number = "unknown";
 	const char *connector_name = "remoting";
 
-	if (!name || !strlen(name))
+	if (!name || !strlen(name) || !remoting)
 		return NULL;
 
 	api = remoting->virtual_output_api;
@@ -557,8 +579,10 @@ weston_module_init(struct weston_compositor *compositor)
 	if (!remoting->virtual_output_api) {
 		headless_api = weston_headless_virtual_output_get_api(compositor);
 
-		if (!headless_api)
+		if (!headless_api) {
+			free(remoting);
 			return -1;
+		}
 
 		remoting->virtual_output_api = headless_api;
 	}

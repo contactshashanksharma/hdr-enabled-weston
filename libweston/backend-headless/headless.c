@@ -733,6 +733,9 @@ err_launcher:
 err_udev:
 	udev_unref(b->udev);
 err_free:
+	if(b->drm_fd) {
+		close(b->drm_fd);
+	}
 	free(b);
 	return NULL;
 }
