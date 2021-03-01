@@ -212,6 +212,7 @@ remoting_output_fence_sync_handler(int fd, uint32_t mask, void *data)
 			lg_remote_send_done(resource);
 		}
 		wl_shm_buffer_end_access(remoting->buffer->shm_buffer);
+		wl_resource_destroy(remoting->buffer->resource);
 		remoting->buffer = NULL;
 	}
 

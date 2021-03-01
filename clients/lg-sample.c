@@ -161,6 +161,16 @@ static const struct wl_registry_listener registry_listener = {
 	handle_global_remove
 };
 
+static void
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+	wl_buffer_destroy(buffer);
+}
+
+static const struct wl_buffer_listener buffer_listener = {
+	buffer_release
+};
+
 static struct wl_buffer *
 lg_create_shm_buffer(int width, int height, void **data_out,
 			     struct wl_shm *shm)
@@ -191,6 +201,7 @@ lg_create_shm_buffer(int width, int height, void **data_out,
 	close(fd);
 	buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride,
 					   WL_SHM_FORMAT_XRGB8888);
+	wl_buffer_add_listener(buffer, &buffer_listener, NULL);
 	wl_shm_pool_destroy(pool);
 
 	*data_out = data;
