@@ -328,8 +328,6 @@ headless_output_enable_gl_gbm(struct headless_output *output)
 	struct weston_compositor *compositor = output->base.compositor;
 	struct headless_backend *b = to_headless_backend(compositor);
 	struct gl_renderer_output_options options = {
-		.window_for_legacy = output->gbm_surface,
-		.window_for_platform = output->gbm_surface,
 		.drm_formats = headless_formats,
 		.drm_formats_count = ARRAY_LENGTH(headless_formats),
 	};
@@ -343,6 +341,9 @@ headless_output_enable_gl_gbm(struct headless_output *output)
 		weston_log("failed to create gbm surface\n");
 		return -1;
 	}
+
+	options.window_for_legacy = output->gbm_surface;
+	options.window_for_platform = output->gbm_surface;
 
 	if (b->glri->output_window_create(&output->base, &options) < 0) {
 		weston_log("failed to create gl renderer output state\n");
@@ -550,7 +551,6 @@ headless_gl_renderer_init_gbm(struct headless_backend *b)
 {
 	struct gl_renderer_display_options options = {
 		.egl_platform = EGL_PLATFORM_GBM_KHR,
-		.egl_native_display = b->gbm,
 		.egl_surface_type = EGL_WINDOW_BIT,
 		.drm_formats = headless_formats,
 		.drm_formats_count = ARRAY_LENGTH(headless_formats),
@@ -558,6 +558,8 @@ headless_gl_renderer_init_gbm(struct headless_backend *b)
 
 	if (!gbm_create_device_headless(b))
 		return -1;
+
+	options.egl_native_display = b->gbm;
 
 	b->glri = weston_load_module("gl-renderer.so", "gl_renderer_interface");
 	if (!b->glri)
